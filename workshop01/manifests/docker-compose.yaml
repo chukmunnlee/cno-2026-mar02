@@ -1,0 +1,90 @@
+networks:
+  default:
+    name: books-net
+    driver: bridge
+
+volumes:
+  db-vol:
+  grafana-data:
+  tempo-data:
+
+services:
+  books-db:
+    image: chukmunnlee/books-db:v1-amd64
+    restart: always
+    volumes:
+    - type: volume
+      source: db-vol
+      target: /var/lib/mysql
+    ports:
+    - 3306:3306
+
+  jaeger:
+    image: jaegertracing/jaeger
+    restart: always
+    ports:
+    - 16686:16686
+    - "4317"
+    - "4318"
+    environment:
+    - LOG_LEVEL=debug
+
+  tempo:
+    image: grafana/tempo:2.9.1
+    command: -config.file=/opt/configs/tempo-config.yaml
+    restart: always
+    volumes:
+    - type: volume
+      source: tempo-data
+      target: /var/tempo
+    - type: bind
+      source: ./configs
+      target: /opt/configs/
+    ports:
+    # OTLP receivers
+    - "4317" # gRPC port
+    - "4318" # HTTP port
+    # Tempo native receives
+    - 3100:3100 # gRPC port
+    - 3200:3200 # HTTP port
+
+  otel:
+    image: otel/opentelemetry-collector-contrib
+    restart: always
+    volumes:
+    - type: bind
+      source: ./configs/otel-gateway-config.yaml
+      target: /etc/otelcol-contrib/config.yaml
+    ports:
+    # health_check extension
+    - 13133:13133 
+    # OTLP gRPC receiver
+    - 4317:4317 
+    # OTLP http receiver
+    - 4318:4318 
+    # zpages extension
+    - 55679:55679
+    depends_on:
+      jaeger:
+        condition: service_started
+      tempo:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana
+    ports:
+    - 3000:3000
+    environment:
+    - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+    - type: volume
+      source: grafana-data
+      target: /var/lib/grafana
+    - type: bind
+      source: ./configs/grafana.ini
+      target: /etc/grafana/grafana.ini
+    depends_on:
+      jaeger:
+        condition: service_started
+      tempo:
+        condition: service_started

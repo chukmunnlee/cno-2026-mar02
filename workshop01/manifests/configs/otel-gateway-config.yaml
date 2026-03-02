@@ -1,0 +1,58 @@
+# TODO: Configure OTel Collector
+# https://opentelemetry.io/docs/collector/configuration/
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  zpages:
+    # view /debug/tracez
+    endpoint: 0.0.0.0:55679
+
+# TODO: Task 1
+# TODO: Configure OTLP gRPC and HTTP receivers
+# Must match your application
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+# TODO: Task 1
+# TODO: Configure Jaeger, Tempo and debug exporters
+# Must match the backend
+exporters:
+  # Jaeger
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  # Tempo
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+  debug:
+    verbosity: detailed
+
+# TODO: Task 1
+# TODO: Configure batch and memory_limiter 
+processors:
+  batch:
+  memory_limiter:
+    limit_mib: 2048
+    spike_limit_mib: 512
+    check_interval: 5s
+
+# TODO: Task 1
+# TODO: Configure extensions and trace pipeline
+service:
+  pipelines:
+    traces:
+      receivers: [ otlp ]
+      processors:
+      - batch 
+      - memory_limiter 
+      exporters: [ otlp/jaeger, otlp/tempo, debug ]
