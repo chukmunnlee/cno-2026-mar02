@@ -38,8 +38,10 @@ receivers:
 exporters:
   # TODO: Task 1
   # TODO: Add a log exporter to Loki
-
-  
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
   otlp/jaeger:
     endpoint: jaeger:4317
     tls:
@@ -66,6 +68,10 @@ service:
     # TODO: Create log pipeline
     # TODO: Task 4
     # TODO: add transform processor to log pipeline
+    logs:
+      receivers: [ otlp ]
+      processors: [ batch, memory_limiter ]
+      exporters: [ otlphttp/loki, debug ]
 
     traces:
       receivers: [ otlp ]

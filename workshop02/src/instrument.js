@@ -21,7 +21,16 @@ const OTEL_COLLECTOR_PORT = process.env.OTEL_COLLECTOR_PORT || 4317
 
 // TODO: Task 2
 // TODO: Add log record processor
-
+// Create a log exporter
+const otlpLogExporter = new OTLPLogExporter({
+    url: `http://${OTEL_COLLECTOR_HOST}:${OTEL_COLLECTOR_PORT}`
+})
+// Create a log batcher
+const logBatchProcessor = new BatchLogRecordProcessor(
+  otlpLogExporter, {
+    maxExportBatchSize: 512
+  }
+)
 
 // Trace exporters
 const otlpTraceProcessor = new BatchSpanProcessor(
@@ -44,7 +53,7 @@ const sdk = new NodeSDK({
 
   // TODO: Task 2
   // TODO: Configure log processor 
-
+  logRecordProcessors: [ logBatchProcessor ],
 
   // Auto configure libraries for auto instrumentation
   instrumentations: getNodeAutoInstrumentations()

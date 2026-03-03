@@ -11,11 +11,16 @@ const serviceName = metadata.name
 const serviceVersion = metadata.version
 
 // TODO: Task 2
-// TODO: Create a OTLP log transport
+// TODO: Create a OTLP log 
+const otlpLogger = logs.getLogger(serviceName, serviceVersion)
 
-
-// TODO: create a OTLP transport for the logger
-
+// TODO: create a OTLP transport for the logger - Winston specific
+const otlpLogTransport = new OTLPTransport({
+  otlpLogger,
+  gracefulShutdown: true,
+  handleExceptions: true,
+  handleRejections: true,
+})
 
 const logger = winston.createLogger({
   level: 'info',
@@ -32,8 +37,7 @@ const logger = winston.createLogger({
   transports: [
     // TODO: Task 2
     // TODO: Add logger over OTLP
-
-    
+    otlpLogTransport,
     new winston.transports.Console({ handleExceptions: true, handleRejections: true })
   ]
 })

@@ -20,7 +20,7 @@ const constantArrivalRate = {
 
 const externallyControlled =  {
   executor: 'externally-controlled',
-  vus: 5,
+  vus: 2,
   duration: '0s',
 }
 

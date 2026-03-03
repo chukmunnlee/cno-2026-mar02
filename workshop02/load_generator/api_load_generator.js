@@ -6,7 +6,7 @@ import getOptions from './scenarios.js'
 const WORDS = require('./words.js')
 
 //TODO: Set the correct API endpoint
-const TARGET_URL = __ENV.TARGET_URL || 'http://api-192.168.39.200.nip.io'
+const TARGET_URL = __ENV.TARGET_URL || 'http://localhost:5000'
 
 const intBetween = function(min = 5, max = 10) {
   return Math.floor(Math.random() * (max - min)) + min
@@ -14,7 +14,7 @@ const intBetween = function(min = 5, max = 10) {
 
 export const options = {
   scenarios: {
-    load_generation: getOptions(__ENV.SCENARIO || 'externally-controlled')
+    load_generation: getOptions(__ENV.SCENARIO || 'externallyControlled')
   }
 }
 
