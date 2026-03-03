@@ -1,0 +1,73 @@
+# TODO: Configure OTel Collector
+# https://opentelemetry.io/docs/collector/configuration/
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  zpages:
+    # view /debug/tracez
+    endpoint: 0.0.0.0:55679
+
+# Processors 
+processors:
+  batch:
+  memory_limiter:
+    # maximum memory usage
+    limit_mib: 2048
+    # Maximum spike between measured memory usage
+    # Triggers GC
+    spike_limit_mib: 410
+    # check every 5s, default is 1s
+    check_interval: 5
+    
+  # TODO: Task 4
+  # TODO: Create a label index severity from resource.attributes.severity_text
+  # TODO: Create a label index db.collection.name from resource.attributes["db.collection.name"]
+
+
+# Receivers - otlp
+receivers:
+  otlp:
+    protocols:
+      grpc: 
+        endpoint: 0.0.0.0:4317
+      http: 
+        endpoint: 0.0.0.0:4318
+
+# Exporters - for Jaeger, Tempo, debug
+exporters:
+  # TODO: Task 1
+  # TODO: Add a log exporter to Loki
+
+  
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  debug:
+    # basic, normal, detailed
+    verbosity: detailed
+    sampling_initial: 1
+    sampling_thereafter: 100
+
+# Service pipeline
+service:
+  extensions: [ health_check, zpages ]
+  # Uncomment to display otel debug messages
+  #telemetry:
+  #  logs:
+  #    level: debug
+  pipelines:
+    # TODO: Task 1
+    # TODO: Create log pipeline
+    # TODO: Task 4
+    # TODO: add transform processor to log pipeline
+
+    traces:
+      receivers: [ otlp ]
+      processors: [ batch, memory_limiter ]
+      exporters: [ otlp/jaeger, otlp/tempo, debug ]
