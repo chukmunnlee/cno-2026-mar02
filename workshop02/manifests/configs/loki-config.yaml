@@ -37,7 +37,14 @@ limits_config:
   
   # TODO: Task 4
   # TODO: Index resource attributes service.name, service.version, db.collection.name and severity
-
+  otlp_config:
+    resource_attributes:
+      attributes_config:
+      - action: index_label 
+        attributes: 
+        - service.name
+        - service.version
+        - severity
 
 #The pattern_ingester configuration enables Log Pattern Detection, a newer Loki feature that automatically discovers and extracts patterns from your log data.
 #What it does:

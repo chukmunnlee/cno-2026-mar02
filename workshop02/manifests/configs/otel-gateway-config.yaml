@@ -23,7 +23,15 @@ processors:
   # TODO: Task 4
   # TODO: Create a label index severity from resource.attributes.severity_text
   # TODO: Create a label index db.collection.name from resource.attributes["db.collection.name"]
-
+  transform:
+    error_mode: ignore
+    log_statements:
+    - context: log 
+      statements: 
+      - set(resource.attributes["severity"], "warn")
+      - set(resource.attributes["severity"], log.severity_text)
+      - set(resource.attributes["service.name"], attributes["service.name"])
+      - set(resource.attributes["service.version"], attributes["service.version"])
 
 # Receivers - otlp
 receivers:
@@ -70,7 +78,7 @@ service:
     # TODO: add transform processor to log pipeline
     logs:
       receivers: [ otlp ]
-      processors: [ batch, memory_limiter ]
+      processors: [ batch, memory_limiter, transform ]
       exporters: [ otlphttp/loki, debug ]
 
     traces:

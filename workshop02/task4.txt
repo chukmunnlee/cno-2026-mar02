@@ -1,0 +1,6 @@
+
+{ service_name = "books" } |= "getBookByISBN13" 
+
+{ service_name = "books", severity=error } |= "getBookByISBN13" 
+
+sum (count_over_time({service_name="books"} |= "/api/search"[1h])) by (severity)
