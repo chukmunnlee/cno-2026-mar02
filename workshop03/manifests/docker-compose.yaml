@@ -1,0 +1,125 @@
+networks:
+  default:
+    name: books-net
+    driver: bridge
+
+volumes:
+  db-vol:
+  grafana-data:
+  tempo-data:
+  loki-data:
+
+services:
+  books-db:
+    image: chukmunnlee/books-db:v1-amd64
+    restart: always
+    volumes:
+    - type: volume
+      source: db-vol
+      target: /var/lib/mysql
+    ports:
+    - 3306:3306
+
+  jaeger:
+    image: jaegertracing/jaeger
+    restart: always
+    ports:
+    - 16686:16686
+    - "4317"
+    - "4318"
+    environment:
+    - LOG_LEVEL=debug
+
+  tempo:
+    image: grafana/tempo:2.9.1
+    command: -config.file=/opt/configs/tempo-config.yaml
+    restart: always
+    volumes:
+    - type: volume
+      source: tempo-data
+      target: /var/tempo
+    - type: bind
+      source: ./configs
+      target: /opt/configs/
+    ports:
+    # OTLP receivers
+    - "4317" # gRPC port
+    - "4318" # HTTP port
+    # Tempo native receives
+    - 3100:3100 # gRPC port
+    - 3200:3200 # HTTP port
+
+  loki:
+    image: grafana/loki:3.6
+    command:
+    - -config.file=/etc/loki/loki-config.yaml
+    user: root
+    restart: always
+    ports:
+    - 33100:3100
+    volumes:
+    - type: bind 
+      source: ./configs/loki-config.yaml
+      target: /etc/loki/loki-config.yaml
+      read_only: true
+    - type: volume
+      source: loki-data
+      target: /var/loki
+
+  prometheus:
+    image: prom/prometheus:latest
+    command: 
+    - --storage.tsdb.retention.time=1h
+    - --config.file=/etc/prometheus/prometheus-config.yaml
+    - --storage.tsdb.path=/prometheus
+    - --web.enable-lifecycle
+    - --web.enable-remote-write-receiver
+    - --enable-feature=exemplar-storage
+    - --enable-feature=native-histograms
+    restart: always
+    ports:
+    - 9090:9090
+    volumes: 
+    - type: bind
+      source: ./configs/prometheus-config.yaml
+      target: /etc/prometheus/prometheus-config.yaml
+      read_only: true
+
+  otel:
+    image: otel/opentelemetry-collector-contrib
+    restart: always
+    volumes:
+    - type: bind
+      source: ./configs/otel-gateway-config.yaml
+      target: /etc/otelcol-contrib/config.yaml
+    ports:
+    - 13133:13133 # health_check extension
+    - 4317:4317 # OTLP gRPC receiver
+    - 4318:4318 # OTLP http receiver
+    - 55679:55679 # zpages extension
+    depends_on:
+      jaeger:
+        condition: service_started
+      tempo:
+        condition: service_started
+
+  grafana:
+    image: grafana/grafana
+    ports:
+    - 3000:3000
+    environment:
+    - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+    - type: volume
+      source: grafana-data
+      target: /var/lib/grafana
+    - type: bind
+      source: ./configs/grafana.ini
+      target: /etc/grafana/grafana.ini
+    depends_on:
+      jaeger:
+        condition: service_started
+      tempo:
+        condition: service_started
+      loki:
+        condition: service_started

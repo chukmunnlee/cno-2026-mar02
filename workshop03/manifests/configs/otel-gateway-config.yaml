@@ -1,0 +1,112 @@
+# TODO: Configure OTel Collector
+# https://opentelemetry.io/docs/collector/configuration/
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  zpages:
+    # view /debug/tracez
+    endpoint: 0.0.0.0:55679
+
+ # TODO: Task 5 - Configure spanmetrics with the following buckets
+ #    [2ms, 4ms, 6ms, 8ms, 10ms, 50ms, 100ms, 200ms, 400ms, 800ms, 1s, 1400ms, 2s, 5s, 10s, 15s]
+
+connectors:
+  spanmetrics:
+    exemplars:
+      enabled: true
+    dimensions:
+    - name: http.method
+    - name: http.route
+    - name: http.status_code
+    aggregation_temporality: "AGGREGATION_TEMPORALITY_CUMULATIVE"
+
+# Processors 
+processors:
+  batch:
+  memory_limiter:
+    # maximum memory usage
+    limit_mib: 2048
+    # Maximum spike between measured memory usage
+    # Triggers GC
+    spike_limit_mib: 410
+    # check every 5s, default is 1s
+    check_interval: 5s
+
+  transform:
+    error_mode: ignore
+    log_statements:
+    - context: log 
+      statements: 
+      - set(resource.attributes["severity"], "warn")
+      - set(resource.attributes["severity"], log.severity_text)
+      - set(resource.attributes["service.name"], attributes["service.name"])
+      - set(resource.attributes["service.version"], attributes["service.version"])
+
+# Receivers - otlp
+receivers:
+  otlp:
+    protocols:
+      grpc: 
+        endpoint: 0.0.0.0:4317
+      http: 
+        endpoint: 0.0.0.0:4318
+
+# Exporters - for Jaeger, Tempo, Prometheus, debug
+exporters:
+
+  # TODO: Task 1 - add Prometheus metric endpoint
+  prometheus:
+    endpoint: 0.0.0.0:9090
+    metric_expiration: 120m0s
+    send_timestamps: true
+    enable_open_metrics: true
+    resource_to_telemetry_conversion:
+      enabled: false
+
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
+  
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+      insecure: true
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  debug:
+    # basic, normal, detailed
+    verbosity: detailed
+    sampling_initial: 1
+    sampling_thereafter: 100
+
+# Service pipeline
+service:
+  extensions: [ health_check, zpages ]
+  # Uncomment to display otel debug messages
+  #telemetry:
+  #  logs:
+  #    level: debug
+  pipelines:
+
+    # TODO: Task 1 - Create metric pipeline
+    metrics:
+      # TODO: Task 6 - Add spanmetrics as receiver to metrics
+      receivers: [ spanmetrics, otlp ]
+      processors: [ batch, memory_limiter ]
+      exporters: [ prometheus, debug ]
+      
+    logs:
+      receivers: [ otlp ]
+      processors: [ batch, memory_limiter, transform ]
+      exporters: [ otlphttp/loki, debug ]
+
+    traces:
+      receivers: [ otlp ]
+      processors: [ batch, memory_limiter ]
+      
+      # TODO: Task 6 - Add spanmetrics as exporter to traces
+      exporters: [ otlp/jaeger, otlp/tempo, debug, spanmetrics ]
