@@ -1,0 +1,103 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: booksserver-svc
+  namespace: books-ns
+spec:
+  type: ClusterIP
+  selector:
+    app: books
+    component: booksserver
+  ports:
+  - name: booksserver
+    port: 5000
+    targetPort: booksserver
+  - name: metrics
+    port: 5050
+    targetPort: metrics
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: booksserver-deploy
+  namespace: books-ns
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: books
+      component: booksserver
+  template:
+    metadata:
+      labels:
+        app: books
+        component: booksserver
+      # TODO: Task 5 - add labels  and annotations
+
+    spec:
+      containers:
+      - name: booksserver-container
+        image: chukmunnlee/books-server:v1.6-amd64 
+        imagePullPolicy: IfNotPresent
+        env:
+        # Enable Prometheus endpoint  5050
+        - name: ENABLE_PROM
+          value: 'yes'
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: books-cm
+              key: BOOKS_SERVER_PORT
+        - name: OTEL_COLLECTOR_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: books-cm
+              key: OTEL_COLLECTOR_HOST
+        - name: BOOKS_URL
+          valueFrom:
+            secretKeyRef:
+              name: books-secret
+              key: BOOKS_URL
+        - name: ERROR_INJECTION_RATE
+          valueFrom:
+            configMapKeyRef:
+              name: books-cm
+              key: ERROR_INJECTION_RATE
+        - name: DB_ERROR_INJECTION_RATE
+          valueFrom:
+            configMapKeyRef:
+              name: books-cm
+              key: DB_ERROR_INJECTION_RATE
+        ports:
+        - name: booksserver
+          containerPort: 5000
+        - name: metrics
+          containerPort: 5050
+
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: booksserver-httproute
+  namespace: books-ns
+spec:
+  parentRefs:
+  - name: traefik-gateway
+    namespace: traefik
+    port: 8000
+  hostnames:
+  #TODO: Task 3 - change the TRAEFIK_IP to the load balancer IP address
+  - api-163.47.11.97.nip.io
+
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: booksserver-svc
+      namespace: books-ns
+      port: 5000
+

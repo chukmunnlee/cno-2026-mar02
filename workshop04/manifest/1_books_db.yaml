@@ -1,0 +1,111 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: booksdb-hsvc
+  namespace: books-ns
+spec:
+  clusterIP: None
+  selector:
+    app: books
+    component: booksdb
+  ports:
+  - name: mysql 
+    port: 3306
+    targetPort: 3306
+  - name: metrics
+    port: 9104
+    targetPort: metrics
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: booksdb-svc
+  namespace: books-ns
+spec:
+  type: ClusterIP
+  selector:
+    app: books
+    component: booksdb
+  ports:
+  - name: mysql 
+    port: 3306
+    targetPort: 3306
+  - name: metrics
+    port: 9104
+    targetPort: metrics
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: booksdb-sts
+  namespace: books-ns
+spec:
+  replicas: 1
+  serviceName: booksdb-hsvc
+  selector:
+    matchLabels:
+      app: books
+      component: booksdb
+  volumeClaimTemplates:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: db-vol
+    spec:
+      accessModes: [ ReadWriteOncePod ]
+      resources:
+        requests:
+          storage: 1Gi
+      # TODO: Task 4 - Change this to an appropriate storageClassName
+      storageClassName: do-block-storage
+  template:
+    metadata:
+      labels:
+        app: books
+        component: booksdb
+        # TODO: Task 5 - add labels  and annotations 
+
+    spec:
+      containers:
+      - name: bookdb-container
+        image: chukmunnlee/books-db:v1.5-amd64
+        imagePullPolicy: IfNotPresent
+        volumeMounts:
+        - name: db-vol
+          mountPath: /var/lib/mysql
+        ports:
+        - name: mysql
+          containerPort: 3306
+      - name: mysqld-exporter-container
+        image: prom/mysqld-exporter:latest
+        imagePullPolicy: IfNotPresent
+        # https://github.com/prometheus/mysqld_exporter
+        args:
+        - --collect.global_status 
+        - --collect.info_schema.innodb_metrics 
+        - --collect.auto_increment.columns 
+        - --collect.info_schema.processlist 
+        - --collect.binlog_size 
+        - --collect.info_schema.tablestats 
+        - --collect.global_variables 
+        - --collect.info_schema.query_response_time 
+        - --collect.info_schema.userstats 
+        - --collect.info_schema.tables 
+        - --collect.perf_schema.tablelocks 
+        - --collect.perf_schema.file_events 
+        - --collect.perf_schema.eventswaits 
+        - --collect.perf_schema.indexiowaits 
+        - --collect.perf_schema.tableiowaits 
+        - --collect.slave_status 
+        - --web.listen-address=0.0.0.0:9104
+        - --mysqld.username=mysqld_exporter
+        envFrom:
+        - secretRef:
+            name: books-secret
+        ports:
+        - name: metrics 
+          containerPort: 9104
+

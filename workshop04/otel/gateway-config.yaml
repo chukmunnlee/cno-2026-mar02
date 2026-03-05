@@ -1,0 +1,112 @@
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  zpages:
+    # view /debug/tracez
+    endpoint: 0.0.0.0:55679
+
+connectors:
+  spanmetrics:
+    histogram:
+      explicit:
+        buckets: [2ms, 4ms, 6ms, 8ms, 10ms, 50ms, 100ms, 200ms, 400ms, 800ms, 1s, 1400ms, 2s, 5s, 10s, 15s]
+    exemplars: 
+      enabled: true
+    dimensions:
+    - name: http.method
+    - name: http.route
+    - name: http.status_code
+    aggregation_temporality: "AGGREGATION_TEMPORALITY_CUMULATIVE"
+
+# Processors 
+processors:
+  batch: {}
+  memory_limiter:
+    # maximum memory usage
+    limit_mib: 512
+    # Maximum spike between measured memory usage
+    # Triggers GC
+    spike_limit_mib: 128
+    # check every 5s, default is 1s
+    check_interval: 5
+
+  transform:
+    error_mode: ignore
+    log_statements:
+    - context: log 
+      statements: 
+      - set(resource.attributes["severity"], "warn")
+      - set(resource.attributes["severity"], log.severity_text)
+      - set(resource.attributes["service.name"], attributes["service.name"])
+      - set(resource.attributes["service.version"], attributes["service.version"])
+
+# Receivers - otlp
+receivers:
+  otlp:
+    protocols:
+      grpc: 
+        endpoint: 0.0.0.0:4317
+      http: 
+        endpoint: 0.0.0.0:4318
+        
+  # TODO: Task 5 - Use service discovery to scrape application metrics
+
+
+# Exporters - for Loki, Tempo, Prometheus, debug
+exporters:
+
+  # TODO: Task 5 - configure Prometheus remote write endpoint - /api/v1/write
+
+  prometheus:
+    endpoint: 0.0.0.0:9090
+    send_timestamps: true
+    metric_expiration: 180m
+    resource_to_telemetry_conversion:
+      enabled: false
+    enable_open_metrics: true
+
+  otlphttp/loki:
+    # TODO: Task 2 - configure Loki endpoint
+    # FQDN service - <service name>.<namespace>.svc.cluster.local
+    endpoint: http://loki.loki.svc.cluster.local:3100/otlp
+    tls:
+      insecure: true
+  
+  otlp/tempo:
+    # TODO: Task 2 - configure Tempo endpoint
+    endpoint: tempo.tempo.svc.cluster.local:4317
+    tls:
+      insecure: true
+
+  debug:
+    # basic, normal, detailed
+    verbosity: detailed
+    sampling_initial: 1
+    sampling_thereafter: 100
+
+# Service pipeline
+service:
+  extensions: [ health_check, zpages ]
+  # Uncomment to display otel debug messages
+  #telemetry:
+  #  logs:
+  #    level: debug
+  pipelines:
+
+    metrics:
+      # TODO: Task 5 - Add service discovery to metrics pipeline
+      receivers: [ otlp, spanmetrics ]
+      processors: [ batch, memory_limiter ]
+      # TODO: Task 2 - Add prometheusremotewrite exporter
+      exporters:  [ debug ]
+      
+    logs:
+      receivers: [ otlp ]
+      processors: [ batch, memory_limiter, transform ]
+      exporters: [ otlphttp/loki, debug ]
+
+    traces:
+      receivers: [ otlp ]
+      processors: [ batch, memory_limiter ]
+      exporters: [ otlp/tempo, debug, spanmetrics ]
+

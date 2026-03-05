@@ -1,0 +1,40 @@
+ports:
+  # 8080 - dashboard
+  traefik:
+    expose:
+      default: true
+    exposedPort: 8080
+  metrics:
+    # 9100 - metrics
+    expose:
+      default: true
+    exposedPort: 9100
+
+ingressRoute:
+  dashboard:
+    enabled: true
+
+# enable access logging
+logs:
+  access:
+    enabled: true
+
+providers:
+  kubernetesIngress:
+    enabled: true
+  # enable Gateway
+  kubernetesGateway:
+   enabled: true
+
+gateway:
+  listeners:
+    web:
+      namespacePolicy: 
+        from: All
+
+metrics:
+  prometheus:
+    entryPoint: metrics
+    addEntryPointsLabels: true
+    addServicesLabels: true
+    addRoutersLabels: true
