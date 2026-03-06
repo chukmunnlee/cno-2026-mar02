@@ -1,0 +1,7 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: quickpizza
+  #TODO: Task 3 - Add annotations for auto instrumentation
+  # Golang, exec in /bin/quickpizza

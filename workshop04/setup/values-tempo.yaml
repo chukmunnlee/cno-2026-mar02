@@ -48,7 +48,7 @@ tempo:
     enabled: true
     # From kube-prometheus-stack
     # TODO: Task 1 - Update __PROMETHEUS_ENDPOINT__ with the Prometheus service name, /api/v1/write
-    remotewriteurl: http://prom-stack-kube-prometheus-prometheus.monitoring:9090/api/v1/write
+    remoteWriteUrl: http://prom-stack-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090/api/v1/write
 
     #config:
     #  generate_native_histograms: both

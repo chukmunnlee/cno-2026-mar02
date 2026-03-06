@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- ../base/quickpizza
+- httproutes.yaml
+
+namespace: quickpizza
+
+configMapGenerator:
+- name: quickpizza-env
+  literals:
+  #TODO: Task 2 - Configure OTEL endpoint, use 4318 port
+  - QUICKPIZZA_OTLP_ENDPOINT=http://quickpizza-gateway-collector.quickpizza.svc.cluster.local:4318
+
+replacements:
+- source:
+    kind: Service
+    name: quickpizza-public-api
+    fieldPath: metadata.namespace
+  targets:
+  - select:  
+      kind: HTTPRoute
+    fieldPaths:
+    - spec.rules.[matches=.*].backendRefs.[name=quickpizza-*].namespace
+    options:
+      create: true
+
+patches:
+- target:
+    version: v1
+    kind: Service
+    name: quickpizza-grpc
+  path: ./patch-lb-services.yaml
+- target:
+    version: v1
+    kind: Service
+    name: quickpizza-public-api
+  path: ./patch-lb-services.yaml
+

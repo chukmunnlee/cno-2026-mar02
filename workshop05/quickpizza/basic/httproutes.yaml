@@ -1,0 +1,44 @@
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: quickpizza-public-api
+spec:
+  parentRefs:
+  - namespace: traefik
+    name: traefik-gateway
+    port: 8000
+  hostnames:
+  # TODO: Task 2 - Replace with Traefik's loadbalancer IP
+  - quickpizza-public-api-163.47.11.97.nip.io
+  rules:
+  - matches:
+    - path: 
+        value: /
+        type: PathPrefix
+    backendRefs:
+    - name: quickpizza-public-api
+      port: 3333
+
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: quickpizza-grpc
+spec:
+  parentRefs:
+  - namespace: traefik
+    name: traefik-gateway
+    port: 8000
+  hostnames:
+  # TODO: Task 2 - Replace with Traefik's loadbalancer IP
+  - quickpizza-grpc-163.47.11.97.nip.io
+  rules:
+  - matches:
+    - path: 
+        value: /
+        type: PathPrefix
+    backendRefs:
+    - name: quickpizza-grpc
+      port: 3334
+

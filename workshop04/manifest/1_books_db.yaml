@@ -67,6 +67,11 @@ spec:
         app: books
         component: booksdb
         # TODO: Task 5 - add labels  and annotations 
+        app.kubernetes.io/name: booksdb
+        app.kubernetes.io/version: mar6-2026
+      annotations:
+        prometheus.io/scrape: 'true'
+        prometheus.io/port: '9104'
 
     spec:
       containers:

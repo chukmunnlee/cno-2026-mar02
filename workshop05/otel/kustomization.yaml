@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+- rbac.yaml
+- quickpizza-gateway.yaml
+- quickpizza-agent.yaml
+
+namespace: quickpizza

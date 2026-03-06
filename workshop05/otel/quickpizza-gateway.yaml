@@ -1,0 +1,161 @@
+---
+# https://github.com/open-telemetry/opentelemetry-operator/blob/main/docs/api/opentelemetrycollectors.md#opentelemetryiov1beta1
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: quickpizza-gateway
+  namespace: quickpizza
+spec:
+  mode: deployment
+  image: otel/opentelemetry-collector-contrib:latest
+  imagePullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: 1024Mi
+      cpu: 200m
+    limits:
+      memory: 1024Mi
+      cpu: 200m
+  serviceAccount: otel-sa
+
+  config:
+
+    extensions:
+      health_check:
+        endpoint: 0.0.0.0:13133
+      zpages:
+        # view /debug/tracez
+        endpoint: 0.0.0.0:55679
+
+    connectors:
+      spanmetrics:
+        histogram:
+          explicit:
+            buckets: [2ms, 4ms, 6ms, 8ms, 10ms, 50ms, 100ms, 200ms, 400ms, 800ms, 1s, 1400ms, 2s, 5s, 10s, 15s]
+        exemplars: 
+          enabled: true
+        dimensions:
+        - name: http.method
+        - name: http.route
+        - name: http.status_code
+        aggregation_temporality: "AGGREGATION_TEMPORALITY_CUMULATIVE"
+
+    # Processors 
+    processors:
+      batch: {}
+
+      memory_limiter:
+        # maximum memory usage
+        limit_mib: 512
+        # Maximum spike between measured memory usage
+        # Triggers GC
+        spike_limit_mib: 128
+        # check every 5s, default is 1s
+        check_interval: 5
+        
+      # Kubernetes attributes processor for enriching telemetry
+      k8sattributes:
+        extract:
+          metadata:
+          - k8s.namespace.name
+          - k8s.pod.name
+          - k8s.pod.uid
+          - k8s.deployment.name
+          labels:
+          - tag_name: service.name
+            key: app.kubernetes.io/instance
+            from: pod
+          - tag_name: service.namespace
+            key: app.k8s.io/name
+            from: pod
+        pod_association:
+        - sources:
+          - from: resource_attribute
+            name: k8s.pod.ip
+        - sources:
+          - from: connection
+
+      # Resource processor to add service attributes
+      resource:
+        attributes:
+        - key: service.namespace
+          value: quickpizza
+          action: upsert
+
+    # Receivers - otlp
+    receivers:
+      otlp:
+        protocols:
+          grpc: 
+            endpoint: 0.0.0.0:4317
+          http: 
+            endpoint: 0.0.0.0:4318
+
+      prometheus:
+        config:
+          scrape_configs:
+          - job_name: 'quickpizza'
+            scrape_interval: 10s
+            static_configs:
+            - targets:
+              - "quickpizza-public-api.quickpizza.svc.cluster.local:3333"
+
+    # Exporters - for Loki, Tempo, Prometheus, debug
+    exporters:
+      prometheus:
+        endpoint: 0.0.0.0:9090
+        send_timestamps: true
+        metric_expiration: 180m
+        resource_to_telemetry_conversion:
+          enabled: false
+        enable_open_metrics: true
+
+      prometheusremotewrite:
+        # TODO: Task 2 - Check Prometheus write endpoint. Use path /api/v1/write
+        endpoint: http://prom-stack-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090/api/v1/write
+
+        resource_to_telemetry_conversion:
+          enabled: false
+
+      otlphttp/loki:
+        # TODO: Task 2 - configure Loki endpoint
+        endpoint: http://loki.loki.svc.cluster.local:3100/otlp
+        tls:
+          insecure: true
+      
+      otlp/tempo:
+        # TODO: Task 2 - configure Loki endpoint
+        endpoint: tempo.tempo.svc.cluster.local:4317
+        tls:
+          insecure: true
+
+      debug:
+        # basic, normal, detailed
+        verbosity: detailed
+        sampling_initial: 1
+        sampling_thereafter: 100
+
+    # Service pipeline
+    service:
+      extensions: [ health_check, zpages ]
+      # Uncomment to display otel debug messages
+      #telemetry:
+      #  logs:
+      #    level: debug
+      pipelines:
+
+        metrics:
+          receivers: [ otlp, prometheus, spanmetrics ]
+          processors: [ k8sattributes, batch, memory_limiter ]
+          exporters:  [ prometheusremotewrite, debug ]
+          
+        logs:
+          receivers: [ otlp ]
+          processors: [ k8sattributes, resource, batch, memory_limiter ]
+          exporters: [ otlphttp/loki, debug ]
+
+        traces:
+          receivers: [ otlp ]
+          processors: [ k8sattributes, batch, memory_limiter ]
+          exporters: [ otlp/tempo, debug, spanmetrics ]
+

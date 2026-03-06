@@ -1,0 +1,22 @@
+--- 
+apiVersion: opentelemetry.io/v1alpha1 
+kind: Instrumentation 
+metadata: 
+  name: quickpizza-instrument 
+  namespace: quickpizza
+spec:
+  defaults:
+    # Pick specific labels from pods and add them as metric labels
+    useLabelsForResourceAttributes: true
+
+  # Where are we sending the metrics to
+  exporter: 
+    endpoint: http://quickpizza-gateway-collector.quickpizza.svc.cluster.local:4318
+
+  propagators: 
+  - tracecontext 
+  - baggage
+  - jaeger
+  sampler:
+    type: parentbased_traceidratio 
+    argument: "1.0"

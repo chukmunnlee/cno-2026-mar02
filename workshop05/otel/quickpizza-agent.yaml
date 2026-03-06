@@ -1,0 +1,183 @@
+---
+apiVersion: opentelemetry.io/v1beta1
+kind: OpenTelemetryCollector
+metadata:
+  name: log-otelcol
+  namespace: quickpizza
+spec:
+  mode: daemonset
+  image: otel/opentelemetry-collector-contrib:latest
+  imagePullPolicy: IfNotPresent
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 50m
+    limits:
+      memory: 256Mi
+      cpu: 50m
+
+  volumes:
+  - name: pods-vol
+    hostPath:
+      path: /var/log/pods
+      type: Directory
+  volumeMounts:
+  - name: pods-vol
+    mountPath: /var/log/pods
+    readOnly: true
+
+  config:
+    receivers:
+      filelog:
+        # 1. Locate the logs for the microservices-demo
+        include:
+        - /var/log/pods/*_quickpizza-catalog*/*/*.log
+        - /var/log/pods/*_quickpizza-config*/*/*.log
+        - /var/log/pods/*_quickpizza-copy*/*/*.log
+        - /var/log/pods/*_quickpizza-grpc*/*/*.log
+        - /var/log/pods/*_quickpizza-public-api*/*/*.log
+        - /var/log/pods/*_quickpizza-recommendations*/*/*.log
+        - /var/log/pods/*_quickpizza-ws*/*/*.log
+
+        exclude:
+        - /var/log/pods/*/otel-collector/*.log
+        - /var/log/pods/*/opentelemetry-auto-instrumentation-*/*.log
+        
+        include_file_path: true
+        include_file_name: false
+        start_at: end
+
+        multiline:
+          line_start_pattern: '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}'
+
+        # 2. Operators to parse CRI format and nested JSON
+        operators:
+        # Parse the standard Kubernetes CRI-O/containerd prefix
+        - type: regex_parser
+          regex: '^(?P<time>[^ ]+) (?P<stream>stdout|stderr) (?P<logtag>[^ ]*) (?P<log>.*)$'
+          timestamp:
+            parse_from: attributes.time
+            layout: '%Y-%m-%dT%H:%M:%S.%LZ'
+
+        # Extract pod metadata from file path
+        - type: regex_parser
+          id: filepath_parser
+          parse_from: attributes["log.file.path"]
+          regex: '/var/log/pods/(?P<namespace>[^_]+)_(?P<pod_name>[^_]+)_(?P<pod_uid>[^/]+)/(?P<container_name>[^/]+)/.*\.log'
+
+        # Recombine the split lines
+        - type: recombine
+          combine_field: body
+          is_first_entry: body matches '^[^\t ]'
+          combine_with: "\n"
+          max_log_size: 102400
+          source_identifier: attributes["log.file.path"]
+          force_flush_period: 5s
+        
+        # Move extracted fields to resource attributes
+        - type: move
+          from: attributes.namespace
+          to: resource["k8s.namespace.name"]
+        
+        - type: move
+          from: attributes.pod_name
+          to: resource["k8s.pod.name"]
+        
+        - type: move
+          from: attributes.container_name
+          to: resource["k8s.container.name"]
+        
+        - type: move
+          from: attributes.pod_uid
+          to: resource["k8s.pod.uid"]
+        
+        # Derive service name from pod name
+        - type: regex_parser
+          id: service_name_parser
+          parse_from: resource["k8s.pod.name"]
+          regex: '^(?P<service_name>[a-z-]+)(-[a-z0-9]+)?(-[a-z0-9]+)?$'
+        
+        - type: move
+          from: attributes.service_name
+          to: resource["service.name"]
+        
+        # Move log body
+        - type: move
+          from: attributes.log
+          to: body
+          #
+        #TODO: parse the severity
+        - type: severity_parser
+          parse_from: attributes.severity
+          mapping:
+            debug: [ DEBUG, debug ]
+            info: [ INFO, info ]
+            warn: [ WARN, warn ]
+            warning: [ WARN, warn ]
+            error: [ ERROR, error ]
+            fatal: [ FATAL, fatal ]
+            critical: [ FATAL, fatal ]
+            trace: [ TRACE, trace ]
+          preset: warn
+          if: 'attributes.severity != nil'
+
+        - type: severity_parser
+          parse_from: attributes.level
+          mapping:
+            debug: [debug, DEBUG, Debug ]
+            info: [info, INFO, Info, information ]
+            warn: [ warn, WARN, Warn, warning, WARNING ]
+            error: [ error, ERROR, Error, err ]
+            fatal: [ fatal, FATAL, Fatal, critical, CRITICAL ]
+          preset: warn
+          if: 'attributes.level != nil'
+
+        #TODO: parse trace_id/otelTraceID and span_id/otelSpanID
+        - type: trace_parser
+          id: trace_parser
+          trace_id:
+            parse_from: attributes.trace_id
+          span_id:
+            parse_from: attributes.span_id
+          if: 'attributes.trace_id != nil'
+          
+        - type: trace_parser
+          trace_id:
+            parse_from: attributes.otelTraceID
+          span_id:
+            parse_from: attributes.otelSpanID
+          if: 'attributes.otelTraceID != nil'
+
+    processors:
+      # Adds Pod name, Namespace, and Labels to the logs
+      k8sattributes:
+        auth_type: "serviceAccount"
+        passthrough: false
+        extract:
+          metadata:
+          - k8s.pod.name
+          - k8s.namespace.name
+          - k8s.container.name
+          - k8s.node.name
+        pod_association:
+        - sources:
+          - from: resource_attribute
+            name: k8s.pod.name
+
+      batch:
+        send_batch_size: 1000
+        timeout: 10s
+
+    exporters:
+      otlp:
+        #TODO: Task 2 - configure the correct endpoint, use 4317
+        endpoint: quickpizza-gateway-collector.quickpizza.svc.cluster.local:4317
+        tls: 
+          insecure: true
+
+    service:
+      pipelines:
+        logs:
+          receivers: [ filelog ]
+          processors: [ batch ]
+          exporters: [ otlp ]
